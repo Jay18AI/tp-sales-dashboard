@@ -382,33 +382,35 @@ function parseSheet(csv){
 
 // ─── LOAD ─────────────────────────────────────────────────
 async function init(){
-  document.getElementById('ls').classList.remove('hide');
-  document.getElementById('upd').textContent='Fetching…';
+  // Always show data immediately from embedded fallback
+  DATA = JSON.parse(JSON.stringify(FALLBACK));
+  document.getElementById('upd').textContent='Showing cached data…';
+  if(!DATA[curM]) curM=Object.keys(DATA)[0]||'Jan26';
+  document.getElementById('ls').classList.add('hide');
+  renderAll();
+
+  // Then try to fetch live in background
   try{
     const fetches=TABS.map(t=>fetchCSV(t));
     const results=await Promise.allSettled(fetches);
-    DATA={};
+    const liveData={};
     results.forEach((r,i)=>{
       if(r.status==='fulfilled'){
         const p=parseSheet(r.value);
-        if(p) DATA[KEYS[i]]=p;
-      } else {
-        console.warn('Failed to fetch '+TABS[i],r.reason);
+        if(p&&p.bdm&&p.bdm.length>0) liveData[KEYS[i]]=p;
       }
     });
-    if(!Object.keys(DATA).length) throw new Error('No sheets loaded');
-    const now=new Date();
-    document.getElementById('upd').textContent=
-      'Updated '+now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})+
-      ' · '+now.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+    if(Object.keys(liveData).length>0){
+      DATA=liveData;
+      const now=new Date();
+      document.getElementById('upd').textContent=
+        'Live · '+now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})+
+        ' · '+now.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+      renderAll();
+    }
   } catch(e){
-    console.error(e);
-    DATA=FALLBACK;
-    document.getElementById('upd').textContent='Offline · cached data';
+    console.log('Live fetch failed, using cached data');
   }
-  document.getElementById('ls').classList.add('hide');
-  if(!DATA[curM]) curM=Object.keys(DATA)[0]||'Jan26';
-  renderAll();
 }
 
 // ─── CUMULATIVE ────────────────────────────────────────────
