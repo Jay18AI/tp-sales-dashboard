@@ -11,7 +11,7 @@
   --b1:#1c2a3a;--b2:#223245;
   --t1:#d8e8f5;--t2:#6b85a0;--t3:#3d5570;
   --acc:#00d4ff;--acc2:#0095cc;
-  --gold:#f5c842;--silver:#a8bcc8;--bronze:#c47c3a;
+  --gold:#f5c842;
   --green:#00c896;--yellow:#f5a020;--red:#f04155;--purple:#8b5cf6;--orange:#f97316
 }
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;font-size:13px}
@@ -107,13 +107,9 @@ tbody tr:hover{background:rgba(255,255,255,.015)}
 tbody tr:last-child{border-bottom:none}
 td{padding:9px 13px;vertical-align:middle}
 /* Medal rows */
-.m1{background:linear-gradient(90deg,rgba(245,200,66,.08),transparent 60%)!important;border-left:3px solid var(--gold)!important}
-.m2{background:linear-gradient(90deg,rgba(168,188,200,.06),transparent 60%)!important;border-left:3px solid var(--silver)!important}
-.m3{background:linear-gradient(90deg,rgba(196,124,58,.06),transparent 60%)!important;border-left:3px solid var(--bronze)!important}
 /* TD helpers */
 .tc{width:44px;text-align:center}
 .rk{font-size:11px;color:var(--t3);font-weight:700;font-variant-numeric:tabular-nums}
-.mi{font-size:18px;line-height:1}
 .nm{font-weight:600;color:var(--t1);max-width:160px;overflow:hidden;text-overflow:ellipsis}
 .sm{color:var(--t2);font-size:12px}
 .rv{text-align:right;font-variant-numeric:tabular-nums;font-size:12px}
@@ -207,9 +203,6 @@ let curT = 'bdm';
 let srch = '';
 
 // ─── HELPERS ─────────────────────────────────────────────
-const M = ['🥇','🥈','🥉'];
-const MC = ['m1','m2','m3'];
-
 function v(n){ return (typeof n==='number'&&!isNaN(n))?n:0; }
 
 function fmt(n){
@@ -235,7 +228,6 @@ function slK(s){
   if(s==='Institution')return'In';
   return'R';
 }
-function slLabel(s){ return s||'Regular'; }
 function prog(val,max){
   const p=max>0?Math.min(100,v(val)/v(max)*100):0;
   const c=achColor(max>0?v(val)/v(max):0);
@@ -555,7 +547,7 @@ function renderSummary(){
 function renderLB(){
   const cum=D()._cum||false;
   const TABS2=[
-    {id:'bdm',  lbl:'BDM Leaderboard', ic:'🏆', note:'Sorted: Total Revenue ↓, then Core Revenue % ↓. 🥇🥈🥉 medals = Core % rank among top 3 earners.'},
+    {id:'bdm',  lbl:'BDM Leaderboard', ic:'🏆', note:'Sorted: Total Revenue ↓, then Core Revenue % ↓.'},
     {id:'am',   lbl:'AM Leaderboard',  ic:'👔', note:'Sorted: Revenue per BDM ↓.'},
     {id:'rm',   lbl:'RM Leaderboard',  ic:'🌐', note:'Sorted: Total Revenue ↓.'},
     {id:'inside',lbl:'Inside Sales',   ic:'📞', note:'Sorted: Total Revenue ↓.'},
@@ -592,18 +584,12 @@ function tblBDM(d){
   if(srch) rows=rows.filter(r=>[r.name,r.am,r.location,r.slab].join(' ').toLowerCase().includes(srch));
   // Sort: totalRevenue desc, then coreContributionPct desc
   rows.sort((a,b)=>v(b.totalRevenue)!==v(a.totalRevenue)?v(b.totalRevenue)-v(a.totalRevenue):v(b.coreContributionPct)-v(a.coreContributionPct));
-  // Medals: top 3 by revenue → rank those 3 by core%
-  const top3=[...rows].slice(0,3).sort((a,b)=>v(b.coreContributionPct)-v(a.coreContributionPct));
-  const mm={}; top3.forEach((r,i)=>mm[r.name]=i);
   const body=rows.map((r,i)=>{
-    const mi=mm[r.name];
-    const mc=mi!=null?MC[mi]:'';
-    return `<tr class="${mc}">
-      <td class="tc">${mi!=null?`<span class="mi">${M[mi]}</span>`:`<span class="rk">#${i+1}</span>`}</td>
+    return `<tr>
+      <td class="tc"><span class="rk">#${i+1}</span></td>
       <td class="nm">${r.name}</td>
       <td class="sm">${r.am||'—'}</td>
       <td class="sm">${r.location||'—'}</td>
-      <td><span class="sl sl-${slK(r.slab)}">${slLabel(r.slab)}</span></td>
       <td class="rv">${fmt(r.target)}</td>
       <td class="rv rb">${fmt(r.totalRevenue)}</td>
       <td class="rv">${fmt(r.coreRevenue)}</td>
@@ -617,7 +603,7 @@ function tblBDM(d){
     <div class="thead-info"><span>${rows.length} BDMs</span></div>
     <div class="tscroll"><table>
       <thead><tr>
-        <th class="tc">Rank</th><th>Name</th><th>AM</th><th>Location</th><th>Slab</th>
+        <th class="tc">Rank</th><th>Name</th><th>AM</th><th>Location</th>
         <th class="ra">Target</th><th class="ra">Total Rev ↓</th><th class="ra">Core Rev</th>
         <th class="ra">Txn Rev</th><th class="ra">Other Rev</th><th class="ra">Core %</th><th>Vs Target</th>
       </tr></thead>
@@ -628,8 +614,8 @@ function tblBDM(d){
 
 function tblAM(d){
   const rows=[...d.am].sort((a,b)=>v(b.revenuePerBDM)-v(a.revenuePerBDM));
-  const body=rows.map((r,i)=>`<tr class="${i<3?MC[i]:''}">
-    <td class="tc">${i<3?`<span class="mi">${M[i]}</span>`:`<span class="rk">#${i+1}</span>`}</td>
+  const body=rows.map((r,i)=>`<tr>
+    <td class="tc"><span class="rk">#${i+1}</span></td>
     <td class="nm">${r.name}</td>
     <td class="sm">${r.rm||'—'}</td>
     <td class="sm">${r.location||'—'}</td>
@@ -655,8 +641,8 @@ function tblAM(d){
 
 function tblRM(d){
   const rows=[...d.rm].sort((a,b)=>v(b.totalRevenue)-v(a.totalRevenue));
-  const body=rows.map((r,i)=>`<tr class="${i<3?MC[i]:''}">
-    <td class="tc">${i<3?`<span class="mi">${M[i]}</span>`:`<span class="rk">#${i+1}</span>`}</td>
+  const body=rows.map((r,i)=>`<tr>
+    <td class="tc"><span class="rk">#${i+1}</span></td>
     <td class="nm">${r.name}</td>
     <td class="sm">${r.location||'—'}</td>
     <td class="rv">${r.numBDMs}</td>
@@ -681,13 +667,9 @@ function tblRM(d){
 
 function tblInside(d){
   const rows=[...d.inside].sort((a,b)=>v(b.totalRevenue)-v(a.totalRevenue));
-  // Medals by total revenue rank (1st sort already); secondary medal = core%
-  const top3=[...rows].slice(0,3).sort((a,b)=>v(b.coreContributionPct)-v(a.coreContributionPct));
-  const mm={}; top3.forEach((r,i)=>mm[r.name]=i);
   const body=rows.map((r,i)=>{
-    const mi=mm[r.name];
-    return `<tr class="${mi!=null?MC[mi]:''}">
-      <td class="tc">${mi!=null?`<span class="mi">${M[mi]}</span>`:`<span class="rk">#${i+1}</span>`}</td>
+    return `<tr>
+      <td class="tc"><span class="rk">#${i+1}</span></td>
       <td class="nm">${r.name}</td>
       <td class="sm">${r.location||'—'}</td>
       <td class="rv">${fmt(r.target)}</td>
@@ -783,19 +765,6 @@ function renderAnalytics(){
     <td class="g">${x.count}/${mks.length}</td>
   </tr>`).join(''):`<tr><td colspan="5" style="text-align:center;color:var(--t3);padding:12px">More months needed</td></tr>`;
 
-  // 6. Attention needed (PIP / Warning)
-  const danger=[];
-  mks.forEach(mk=>DATA[mk].bdm.filter(b=>['PIP','Warning'].includes(b.slab)).forEach(b=>{
-    if(!danger.find(x=>x.name===b.name)) danger.push({...b,month:ML[mk]});
-  }));
-  const dRows=danger.length?danger.slice(0,8).map(r=>`<tr>
-    <td class="nm" style="max-width:120px">${r.name}</td>
-    <td class="sm">${r.month}</td>
-    <td><span class="sl sl-${slK(r.slab)}">${r.slab}</span></td>
-    <td class="rv rb">${fmt(r.totalRevenue)}</td>
-    <td class="cp">${pct(r.coreContributionPct)}</td>
-  </tr>`).join(''):`<tr><td colspan="5" style="text-align:center;color:var(--green);padding:12px">✓ No PIP/Warning BDMs</td></tr>`;
-
   // 7. 100% target hit rate per month
   const hitRate=mks.map(mk=>{
     const b=DATA[mk].bdm;
@@ -857,10 +826,6 @@ function renderAnalytics(){
       <div class="cc"><div class="cct">💪 Consistent Performers (All Months)</div>
         <table class="mt"><thead><tr><th>#</th><th>BDM</th><th>AM</th><th class="ra">Total Rev</th><th class="ra">Months</th></tr></thead>
         <tbody>${conRows}</tbody></table></div>
-
-      <div class="cc"><div class="cct">⚠️ Attention: PIP / Warning BDMs</div>
-        <table class="mt"><thead><tr><th>BDM</th><th>Month</th><th>Status</th><th class="ra">Revenue</th><th class="ra">Core%</th></tr></thead>
-        <tbody>${dRows}</tbody></table></div>
 
       <div class="cc"><div class="cct">✅ BDMs Hitting 100%+ Target</div>
         <table class="mt"><thead><tr><th>Month</th><th class="ra">Hit</th><th class="ra">Total</th><th class="ra">Rate</th></tr></thead>
