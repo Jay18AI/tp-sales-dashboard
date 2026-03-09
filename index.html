@@ -196,8 +196,8 @@ td{padding:9px 13px;vertical-align:middle}
 
 <script>
 // ─── CONFIG ───────────────────────────────────────────────
-const SID = '18UjuOiSNpJaTmL_Cad3Fc81Nt2oP4pOyTEdkvWtGtwg';
-const TABS = ["Jan'26","Feb'26","Mar'26"];
+const PUB_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSxzHyNDAHWqspxrYoWdOR2FVGpayk0aizTPcX3C1W2a2V9dNnHR1f7cC5jPwC_ykT6saHSbImzkE0R/pub?output=csv';
+const SHEET_GIDS = [0, 1, 2];
 const KEYS = ['Jan26','Feb26','Mar26'];
 
 // ─── STATE ────────────────────────────────────────────────
@@ -243,10 +243,10 @@ function prog(val,max){
 }
 
 // ─── CSV FETCH & PARSE ────────────────────────────────────
-async function fetchCSV(name){
-  const url=`https://docs.google.com/spreadsheets/d/${SID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
+async function fetchCSV(gid){
+  const url=PUB_BASE+'&gid='+gid+'&t='+Date.now();
   const r=await fetch(url);
-  if(!r.ok) throw new Error('HTTP '+r.status+' for sheet '+name);
+  if(!r.ok) throw new Error('HTTP '+r.status+' for gid '+gid);
   return r.text();
 }
 
@@ -389,27 +389,40 @@ async function init(){
   document.getElementById('ls').classList.add('hide');
   renderAll();
 
-  // Then try to fetch live in background
+  // Then try to fetch live from published Google Sheet
   try{
-    const fetches=TABS.map(t=>fetchCSV(t));
+    const fetches=SHEET_GIDS.map(g=>fetchCSV(g));
     const results=await Promise.allSettled(fetches);
     const liveData={};
+    let fetchedCount=0;
     results.forEach((r,i)=>{
       if(r.status==='fulfilled'){
-        const p=parseSheet(r.value);
-        if(p&&p.bdm&&p.bdm.length>0) liveData[KEYS[i]]=p;
+        try{
+          const p=parseSheet(r.value);
+          // Validate: must have real BDM data
+          if(p && p.bdm && p.bdm.length>5 && p.summary && p.summary.totalRevenue>0){
+            liveData[KEYS[i]]=p;
+            fetchedCount++;
+          }
+        }catch(pe){ console.warn('Parse error for gid '+SHEET_GIDS[i],pe); }
+      } else {
+        console.warn('Fetch failed for gid '+SHEET_GIDS[i]+':',r.reason);
       }
     });
-    if(Object.keys(liveData).length>0){
+    if(fetchedCount>0){
       DATA=liveData;
       const now=new Date();
       document.getElementById('upd').textContent=
-        'Live · '+now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})+
+        '🟢 Live · '+now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})+
         ' · '+now.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+      if(!DATA[curM]) curM=Object.keys(DATA)[0]||'Jan26';
       renderAll();
+    } else {
+      document.getElementById('upd').textContent='⚡ Cached data · refresh to retry';
     }
   } catch(e){
-    console.log('Live fetch failed, using cached data');
+    console.log('Live fetch error:',e.message);
+    document.getElementById('upd').textContent='⚡ Cached data · refresh to retry';
   }
 }
 
