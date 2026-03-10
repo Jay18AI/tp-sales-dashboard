@@ -244,23 +244,41 @@ async function fetchAllSheets(){
     console.log('[fetch] No Apps Script URL — using embedded data');
     return {};
   }
-  const url = APPS_SCRIPT_URL + '?cachebust=' + Date.now();
-  const r = await fetch(url, {cache:'no-store'});
-  if(!r.ok) throw new Error('HTTP ' + r.status);
-  const data = await r.json();
-  
-  // Log debug info from script
-  if(data._debug) console.log('[Apps Script debug]', data._debug);
-  if(data._sheets) console.log('[Apps Script sheets found]', data._sheets);
-  if(data.error)   throw new Error('Script error: ' + data.error);
-  
-  // Accept any key that has BDM data (relaxed: length > 0)
-  const validKeys = Object.keys(data).filter(k => !k.startsWith('_') && data[k] && data[k].bdm && data[k].bdm.length > 0);
-  console.log('[fetch] Valid month keys:', validKeys);
-  if(!validKeys.length) throw new Error('No BDM data returned. Sheets found: ' + (data._sheets||[]).join(', '));
-  const out = {};
-  validKeys.forEach(k => out[k] = data[k]);
-  return out;
+  // Use JSONP to bypass CORS redirect that Google Apps Script causes
+  return new Promise(function(resolve, reject){
+    const cbName = '_tpCb_' + Date.now();
+    const timeout = setTimeout(function(){
+      cleanup();
+      reject(new Error('Timeout — script took too long'));
+    }, 15000);
+
+    function cleanup(){
+      clearTimeout(timeout);
+      delete window[cbName];
+      const el = document.getElementById('_jsonp_script');
+      if(el) el.remove();
+    }
+
+    window[cbName] = function(data){
+      cleanup();
+      if(data.error){ reject(new Error('Script error: ' + data.error)); return; }
+      if(data._sheets) console.log('[fetch] Sheets found:', data._sheets);
+      const validKeys = Object.keys(data).filter(function(k){
+        return !k.startsWith('_') && data[k] && data[k].bdm && data[k].bdm.length > 0;
+      });
+      console.log('[fetch] Valid months:', validKeys);
+      if(!validKeys.length){ reject(new Error('No data returned')); return; }
+      const out = {};
+      validKeys.forEach(function(k){ out[k] = data[k]; });
+      resolve(out);
+    };
+
+    const s = document.createElement('script');
+    s.id = '_jsonp_script';
+    s.src = APPS_SCRIPT_URL + '?callback=' + cbName + '&t=' + Date.now();
+    s.onerror = function(){ cleanup(); reject(new Error('Script load failed')); };
+    document.head.appendChild(s);
+  });
 }
 
 function parseCSV(txt){
