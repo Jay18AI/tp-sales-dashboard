@@ -271,6 +271,8 @@ async function fetchAllSheets(){
       if(!validKeys.length){ reject(new Error('No data returned')); return; }
       const out = {};
       validKeys.forEach(function(k){ out[k] = data[k]; });
+      // Pass through SKUwise data
+      if(data._skuwise) out._skuwise = data._skuwise;
       resolve(out);
     };
 
