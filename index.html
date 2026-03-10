@@ -192,12 +192,6 @@ td{padding:9px 13px;vertical-align:middle}
 
 <script>
 // ─── CONFIG ───────────────────────────────────────────────
-// Direct published CSV URLs — sheet name param, no GID needed
-const SHEET_URLS = [
-  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSxzHyNDAHWqspxrYoWdOR2FVGpayk0aizTPcX3C1W2a2V9dNnHR1f7cC5jPwC_ykT6saHSbImzkE0R/pub?output=csv&sheet=Jan%2726',
-  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSxzHyNDAHWqspxrYoWdOR2FVGpayk0aizTPcX3C1W2a2V9dNnHR1f7cC5jPwC_ykT6saHSbImzkE0R/pub?output=csv&sheet=Feb%2726',
-  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSxzHyNDAHWqspxrYoWdOR2FVGpayk0aizTPcX3C1W2a2V9dNnHR1f7cC5jPwC_ykT6saHSbImzkE0R/pub?output=csv&sheet=Mar%2726',
-];
 const KEYS = ['Jan26','Feb26','Mar26'];
 
 // ─── STATE ────────────────────────────────────────────────
@@ -240,36 +234,26 @@ function prog(val,max){
 
 // ─── CSV FETCH & PARSE ────────────────────────────────────
 // ─── LIVE FETCH ENGINE ────────────────────────────────────
-// Uses published-CSV-by-sheet-name URLs — works cross-origin, no GID needed
+// Fetches JSON from Google Apps Script Web App (proper CORS, always works)
+// Set APPS_SCRIPT_URL after deploying apps-script.js as a Web App
 
-async function fetchSheetByURL(url){
-  const r = await fetch(url + '&cachebust=' + Date.now(), {cache:'no-store'});
-  if(!r.ok) throw new Error('HTTP ' + r.status);
-  const txt = await r.text();
-  // Sanity check: must look like a real sheet (has "Slab" in header)
-  if(!txt.includes('Slab')) throw new Error('Not a valid sheet response');
-  return txt;
-}
+const APPS_SCRIPT_URL = ''; // <-- paste your Apps Script Web App URL here after deploying
 
 async function fetchAllSheets(){
-  const results = await Promise.allSettled(SHEET_URLS.map(u => fetchSheetByURL(u)));
-  const monthData = {};
-  results.forEach((res, i) => {
-    if(res.status !== 'fulfilled'){
-      console.warn('[fetch] ' + KEYS[i] + ' failed:', res.reason.message);
-      return;
-    }
-    try{
-      const parsed = parseSheet(res.value);
-      if(parsed && parsed.bdm && parsed.bdm.length > 3){
-        monthData[KEYS[i]] = parsed;
-        console.log('[fetch] ✓ ' + KEYS[i] + ' — BDMs:' + parsed.bdm.length + ' Rev:' + parsed.summary.totalRevenue.toFixed(0));
-      }
-    } catch(e){
-      console.warn('[fetch] Parse error ' + KEYS[i] + ':', e.message);
-    }
-  });
-  return monthData;
+  if(!APPS_SCRIPT_URL){
+    console.log('[fetch] No Apps Script URL configured — using embedded data');
+    return {};
+  }
+  const url = APPS_SCRIPT_URL + '?cachebust=' + Date.now();
+  const r = await fetch(url, {cache:'no-store'});
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  const data = await r.json();
+  // Validate response has real data
+  const validKeys = Object.keys(data).filter(k => data[k].bdm && data[k].bdm.length > 3);
+  if(!validKeys.length) throw new Error('Empty response from Apps Script');
+  const out = {};
+  validKeys.forEach(k => out[k] = data[k]);
+  return out;
 }
 
 function parseCSV(txt){
