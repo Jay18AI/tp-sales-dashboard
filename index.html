@@ -192,9 +192,11 @@ td{padding:9px 13px;vertical-align:middle}
 
 <script>
 // ─── CONFIG ───────────────────────────────────────────────
-const PUB_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSxzHyNDAHWqspxrYoWdOR2FVGpayk0aizTPcX3C1W2a2V9dNnHR1f7cC5jPwC_ykT6saHSbImzkE0R/pub?output=csv';
-const SHEET_GIDS = [0, 1, 2];
+const PUB_ID = '2PACX-1vSxzHyNDAHWqspxrYoWdOR2FVGpayk0aizTPcX3C1W2a2V9dNnHR1f7cC5jPwC_ykT6saHSbImzkE0R';
+const PUB_BASE = 'https://docs.google.com/spreadsheets/d/e/' + PUB_ID + '/pub?output=csv';
+// GIDs will be auto-discovered at runtime
 const KEYS = ['Jan26','Feb26','Mar26'];
+const MONTH_HINTS = ["jan","feb","mar"]; // used to auto-match sheets
 
 // ─── STATE ────────────────────────────────────────────────
 let DATA = {};
@@ -235,11 +237,96 @@ function prog(val,max){
 }
 
 // ─── CSV FETCH & PARSE ────────────────────────────────────
+// ─── LIVE FETCH ENGINE ────────────────────────────────────
+
+// Fetch one GID as CSV from the published URL
 async function fetchCSV(gid){
-  const url=PUB_BASE+'&gid='+gid+'&t='+Date.now();
-  const r=await fetch(url);
-  if(!r.ok) throw new Error('HTTP '+r.status+' for gid '+gid);
+  const url = PUB_BASE + '&gid=' + gid + '&single=true&cachebust=' + Date.now();
+  const r = await fetch(url, {cache:'no-store'});
+  if(!r.ok) throw new Error('HTTP ' + r.status + ' gid=' + gid);
   return r.text();
+}
+
+// Step 1: Parse the pubhtml page to extract all real sheet GIDs
+async function discoverGIDs(){
+  try{
+    const url = 'https://docs.google.com/spreadsheets/d/e/' + PUB_ID + '/pubhtml?cachebust=' + Date.now();
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) return null;
+    const txt = await r.text();
+    // GIDs appear as gid=NNNNNN in tab links inside the HTML
+    const found = [...txt.matchAll(/[?&]gid=([0-9]+)/g)];
+    const gids = [...new Set(found.map(m => parseInt(m[1])))].filter(n => !isNaN(n));
+    console.log('[GID discover] Found GIDs:', gids);
+    return gids.length ? gids : null;
+  } catch(e){
+    console.warn('[GID discover] Failed:', e.message);
+    return null;
+  }
+}
+
+// Step 2: Identify which month a CSV belongs to by scanning its content
+function detectMonth(rows){
+  // Scan first row (headers) for month keywords
+  const top = rows.slice(0, 3).map(r => r.join(' ')).join(' ').toLowerCase();
+  if(top.includes("jan")) return 'Jan26';
+  if(top.includes("feb")) return 'Feb26';
+  if(top.includes("mar")) return 'Mar26';
+  return null;
+}
+
+// Step 3: Master function — auto-discovers GIDs, fetches all sheets, matches to months
+async function fetchAllSheets(){
+  // Discover real GIDs from pubhtml first
+  let gids = await discoverGIDs();
+
+  // If discovery failed, try the most common GID values
+  if(!gids || gids.length < 2){
+    console.warn('[fetchAllSheets] GID discovery failed — trying fallback range');
+    gids = [0,1,2,3,4,5,6,7,8,9,10,1969751686,1303787706]; // common + large GIDs Google sometimes assigns
+  }
+
+  console.log('[fetchAllSheets] Fetching GIDs:', gids);
+
+  // Fetch all in parallel
+  const settled = await Promise.allSettled(gids.map(g => fetchCSV(g)));
+
+  const monthData = {};
+
+  settled.forEach((res, i) => {
+    if(res.status !== 'fulfilled'){
+      console.warn('[fetchAllSheets] GID', gids[i], 'failed:', res.reason?.message);
+      return;
+    }
+    try{
+      const rows = parseCSV(res.value);
+      if(!rows || rows.length < 10) return; // too short to be a real sheet
+
+      // Detect which month this is
+      const mk = detectMonth(rows);
+      if(!mk){
+        console.log('[fetchAllSheets] GID', gids[i], '— month not detected, skipping');
+        return;
+      }
+
+      // Parse the full sheet
+      const parsed = parseSheet(res.value);
+      if(!parsed || !parsed.bdm || parsed.bdm.length < 3) return;
+
+      // Keep the best version for each month (most BDMs = freshest/most complete)
+      if(!monthData[mk] || parsed.bdm.length > monthData[mk].bdm.length){
+        monthData[mk] = parsed;
+        console.log('[fetchAllSheets] ✓ GID', gids[i], '->', mk,
+          '| BDMs:', parsed.bdm.length,
+          '| Rev:', parsed.summary.totalRevenue.toFixed(0));
+      }
+    } catch(pe){
+      console.warn('[fetchAllSheets] Parse error GID', gids[i], pe.message);
+    }
+  });
+
+  console.log('[fetchAllSheets] Loaded months:', Object.keys(monthData));
+  return monthData;
 }
 
 function parseCSV(txt){
@@ -381,40 +468,25 @@ async function init(){
   document.getElementById('ls').classList.add('hide');
   renderAll();
 
-  // Then try to fetch live from published Google Sheet
+  // Fetch live from published Google Sheet (auto-discovers GIDs)
   try{
-    const fetches=SHEET_GIDS.map(g=>fetchCSV(g));
-    const results=await Promise.allSettled(fetches);
-    const liveData={};
-    let fetchedCount=0;
-    results.forEach((r,i)=>{
-      if(r.status==='fulfilled'){
-        try{
-          const p=parseSheet(r.value);
-          // Validate: must have real BDM data
-          if(p && p.bdm && p.bdm.length>5 && p.summary && p.summary.totalRevenue>0){
-            liveData[KEYS[i]]=p;
-            fetchedCount++;
-          }
-        }catch(pe){ console.warn('Parse error for gid '+SHEET_GIDS[i],pe); }
-      } else {
-        console.warn('Fetch failed for gid '+SHEET_GIDS[i]+':',r.reason);
-      }
-    });
-    if(fetchedCount>0){
-      DATA=liveData;
-      const now=new Date();
-      document.getElementById('upd').textContent=
-        '🟢 Live · '+now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})+
-        ' · '+now.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
-      if(!DATA[curM]) curM=Object.keys(DATA)[0]||'Jan26';
+    document.getElementById('upd').textContent='🔄 Syncing…';
+    const liveData = await fetchAllSheets();
+    const fetchedCount = Object.keys(liveData).length;
+    if(fetchedCount > 0){
+      DATA = liveData;
+      if(!DATA[curM]) curM = Object.keys(DATA)[0] || 'Jan26';
+      const now = new Date();
+      const ts = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})
+               + ' · ' + now.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+      document.getElementById('upd').textContent = '🟢 Live · ' + ts;
       renderAll();
     } else {
-      document.getElementById('upd').textContent='⚡ Cached data · refresh to retry';
+      document.getElementById('upd').textContent = '⚡ Cached · Sheet unreachable';
     }
   } catch(e){
-    console.log('Live fetch error:',e.message);
-    document.getElementById('upd').textContent='⚡ Cached data · refresh to retry';
+    console.error('[init] live fetch error:', e.message);
+    document.getElementById('upd').textContent = '⚡ Cached · ' + e.message.slice(0,30);
   }
 }
 
@@ -853,7 +925,7 @@ const FALLBACK={"Jan26":{"bdm":[{"name":"Amit Kumar Singh","am":"Amit Kumar Sing
 
 // ─── START ────────────────────────────────────────────────
 init();
-setInterval(init, 5*60*1000);
+setInterval(init, 3*60*1000); // refresh every 3 min
 </script>
 </body>
 </html>
