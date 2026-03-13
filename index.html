@@ -452,6 +452,14 @@ async function init(){
     const liveData = await fetchAllSheets();
     const fetchedCount = Object.keys(liveData).length;
     if(fetchedCount > 0){
+      // Preserve products from FALLBACK for months where live data has none
+      Object.keys(liveData).forEach(function(mk){
+        if(!liveData[mk].products || !liveData[mk].products.length){
+          if(FALLBACK[mk] && FALLBACK[mk].products && FALLBACK[mk].products.length){
+            liveData[mk].products = FALLBACK[mk].products;
+          }
+        }
+      });
       DATA = liveData;
       if(!DATA[rangeStart]) rangeStart = Object.keys(DATA)[0] || 'Jan26';
       const now = new Date();
