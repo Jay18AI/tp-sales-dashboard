@@ -37,13 +37,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .rbtn:hover{background:rgba(0,212,255,.14)}
 /* MONTH BAR */
 .mbar{background:var(--bg2);border-bottom:1px solid var(--b1)}
-.mbar-in{max-width:1600px;margin:0 auto;display:flex;align-items:center;padding:0 20px;overflow-x:auto;scrollbar-width:none}
-.mbar-in::-webkit-scrollbar{display:none}
-.mtab{padding:11px 18px;border:none;background:transparent;color:var(--t2);cursor:pointer;font-size:12px;font-weight:500;border-bottom:2px solid transparent;transition:all .15s;font-family:inherit;white-space:nowrap;flex-shrink:0}
-.mtab:hover{color:var(--t1)}
-.mtab.on{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
-.cumtab{margin-left:auto;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2)!important;border-bottom:1px solid rgba(139,92,246,.2)!important;border-radius:7px;color:#a78bfa!important;margin-top:7px;margin-bottom:7px;padding:5px 12px!important}
-.cumtab.on{background:rgba(139,92,246,.18);color:#c4b5fd!important}
+.mrange-wrap{max-width:1600px;margin:0 auto;display:flex;align-items:center;padding:9px 20px;gap:10px;flex-wrap:wrap}
+.mrange-lbl{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;font-weight:600;white-space:nowrap}
+.mchips{display:flex;gap:4px}
+.mchip{padding:7px 16px;border:1px solid var(--b2);background:var(--bg3);color:var(--t2);border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;transition:all .15s;font-family:inherit;white-space:nowrap;user-select:none}
+.mchip:hover{border-color:var(--acc);color:var(--acc)}
+.mchip.sel{background:rgba(0,212,255,.13);border-color:var(--acc);color:var(--acc);font-weight:700}
+.mchip.mid{background:rgba(0,212,255,.05);border-color:rgba(0,212,255,.3);color:var(--t1)}
+.mrange-pill{font-size:12px;font-weight:600;color:var(--acc);padding:5px 12px;background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.15);border-radius:7px;white-space:nowrap}
+.mrange-hint{font-size:10px;color:var(--t3);font-style:italic}
+.mrange-clr{font-size:10px;padding:4px 10px;border:1px solid var(--b2);border-radius:6px;cursor:pointer;color:var(--t3);background:transparent;font-family:inherit;transition:.15s}
+.mrange-clr:hover{color:var(--red);border-color:var(--red)}
 /* MAIN */
 .main{max-width:1600px;margin:0 auto;padding:18px 20px}
 /* CARD */
@@ -178,7 +182,16 @@ td{padding:9px 13px;vertical-align:middle}
   </div>
 </header>
 
-<div class="mbar"><div class="mbar-in" id="mbar"></div></div>
+<div class="mbar">
+  <div class="mrange-wrap">
+    <span class="mrange-lbl">Period</span>
+    <div class="mchips" id="mchips"></div>
+    <span style="color:var(--t3);font-size:12px">&#8594;</span>
+    <div class="mrange-pill" id="mrange-pill">Jan '26</div>
+    <button class="mrange-clr" id="mrange-clr" style="display:none" onclick="clearRange()">&#x2715; Reset</button>
+    <span class="mrange-hint" id="mrange-hint">Click a month &middot; Click two months for a range</span>
+  </div>
+</div>
 
 <main class="main">
   <div id="sec-summary"></div>
@@ -196,7 +209,20 @@ const KEYS = ['Jan26','Feb26','Mar26'];
 
 // ─── STATE ────────────────────────────────────────────────
 let DATA = {};
-let curM = 'Jan26';
+// ── MONTH RANGE STATE ────────────────────────────────────
+const ALL_MONTHS = ['Jan26','Feb26','Mar26'];
+const M_LABELS   = {Jan26:"Jan '26", Feb26:"Feb '26", Mar26:"Mar '26"};
+let rangeStart = 'Jan26', rangeEnd = null, rangePicking = false;
+function selectedMonths(){
+  if(!rangeEnd || rangeEnd===rangeStart) return [rangeStart];
+  const si=ALL_MONTHS.indexOf(rangeStart), ei=ALL_MONTHS.indexOf(rangeEnd);
+  return ALL_MONTHS.slice(Math.min(si,ei), Math.max(si,ei)+1);
+}
+function rangeLabel(){
+  const ms=selectedMonths();
+  return ms.length===1 ? M_LABELS[ms[0]] : M_LABELS[ms[0]]+' → '+M_LABELS[ms[ms.length-1]];
+}
+let curM='Jan26'; // kept so DATA[curM] fallbacks still work
 let curT = 'bdm';
 let srch = '';
 
@@ -416,7 +442,7 @@ async function init(){
   // Always show data immediately from embedded fallback
   DATA = JSON.parse(JSON.stringify(FALLBACK));
   document.getElementById('upd').textContent='Showing cached data…';
-  if(!DATA[curM]) curM=Object.keys(DATA)[0]||'Jan26';
+  if(!DATA[rangeStart]) rangeStart=Object.keys(DATA)[0]||'Jan26';
   document.getElementById('ls').classList.add('hide');
   renderAll();
 
@@ -427,7 +453,7 @@ async function init(){
     const fetchedCount = Object.keys(liveData).length;
     if(fetchedCount > 0){
       DATA = liveData;
-      if(!DATA[curM]) curM = Object.keys(DATA)[0] || 'Jan26';
+      if(!DATA[rangeStart]) rangeStart = Object.keys(DATA)[0] || 'Jan26';
       const now = new Date();
       const ts = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})
                + ' · ' + now.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
@@ -483,16 +509,65 @@ function buildCum(){
   return {bdm:Object.values(ab),inside:Object.values(ai),am:Object.values(aa),rm:Object.values(ar),summary:cs,products:Object.values(cp).filter(p=>p.revenue>0),_cum:true};
 }
 
-function D(){ return curM==='CUM'?buildCum():DATA[curM]; }
+function buildRange(ms){
+  const ab={},ai={},aa={},ar={};
+  let cs={target:0,coreRevenue:0,transactionRevenue:0,otherRevenue:0,totalRevenue:0};
+  let cp={};
+  ms.forEach(mk=>{
+    const d=DATA[mk]; if(!d) return;
+    for(const k in cs) cs[k]+=v(d.summary[k]);
+    (d.products||[]).forEach(p=>{
+      if(!cp[p.product]) cp[p.product]={product:p.product,units:0,revenue:0,aov:0};
+      cp[p.product].units+=p.units; cp[p.product].revenue+=p.revenue;
+    });
+    d.bdm.forEach(r=>{
+      if(!ab[r.name]) ab[r.name]={...r};
+      else{ ab[r.name].target+=v(r.target);ab[r.name].totalRevenue+=v(r.totalRevenue);ab[r.name].coreRevenue+=v(r.coreRevenue);ab[r.name].transactionRevenue+=v(r.transactionRevenue);ab[r.name].otherRevenue+=v(r.otherRevenue); }
+    });
+    (d.inside||[]).forEach(r=>{
+      if(!ai[r.name]) ai[r.name]={...r};
+      else{ ai[r.name].target+=v(r.target);ai[r.name].totalRevenue+=v(r.totalRevenue);ai[r.name].coreRevenue+=v(r.coreRevenue); }
+    });
+    (d.am||[]).forEach(r=>{
+      if(!aa[r.name]) aa[r.name]={...r};
+      else{ aa[r.name].target+=v(r.target);aa[r.name].totalRevenue+=v(r.totalRevenue);aa[r.name].coreRevenue+=v(r.coreRevenue);aa[r.name].transactionRevenue+=v(r.transactionRevenue);aa[r.name].otherRevenue+=v(r.otherRevenue); }
+    });
+    (d.rm||[]).forEach(r=>{
+      if(!ar[r.name]) ar[r.name]={...r};
+      else{ ar[r.name].target+=v(r.target);ar[r.name].totalRevenue+=v(r.totalRevenue);ar[r.name].coreRevenue+=v(r.coreRevenue);ar[r.name].transactionRevenue+=v(r.transactionRevenue);ar[r.name].otherRevenue+=v(r.otherRevenue); }
+    });
+  });
+  Object.values(ab).forEach(r=>{ r.coreContributionPct=v(r.totalRevenue)>0?v(r.coreRevenue)/v(r.totalRevenue):0; });
+  Object.values(aa).forEach(r=>{ r.revenuePerBDM=v(r.numBDMs)>0?v(r.totalRevenue)/v(r.numBDMs):0; });
+  Object.values(ar).forEach(r=>{ r.revenuePerBDM=v(r.numBDMs)>0?v(r.totalRevenue)/v(r.numBDMs):0; });
+  Object.values(cp).forEach(p=>{ p.aov=p.units>0?p.revenue/p.units:0; });
+  return {bdm:Object.values(ab),inside:Object.values(ai),am:Object.values(aa),rm:Object.values(ar),
+          summary:cs,products:Object.values(cp).filter(p=>p.revenue>0),_cum:true};
+}
+function D(){
+  const ms=selectedMonths();
+  if(ms.length===1) return DATA[ms[0]] || buildCum();
+  return buildRange(ms);
+}
 
 // ─── MONTH BAR ────────────────────────────────────────────
 function renderMbar(){
-  const LABELS={Jan26:"Jan '26",Feb26:"Feb '26",Mar26:"Mar '26"};
-  let h=Object.keys(DATA).map(k=>
-    `<button class="mtab${curM===k?' on':''}" onclick="setM('${k}')">${LABELS[k]||k}</button>`
-  ).join('');
-  h+=`<button class="mtab cumtab${curM==='CUM'?' on':''}" onclick="setM('CUM')">📊 Cumulative YTD</button>`;
-  document.getElementById('mbar').innerHTML=h;
+  const chips=document.getElementById('mchips');
+  const pill=document.getElementById('mrange-pill');
+  const clr=document.getElementById('mrange-clr');
+  const hint=document.getElementById('mrange-hint');
+  if(!chips) return;
+  const ms=selectedMonths();
+  const si=ALL_MONTHS.indexOf(rangeStart), ei=rangeEnd?ALL_MONTHS.indexOf(rangeEnd):si;
+  const lo=Math.min(si,ei), hi=Math.max(si,ei);
+  chips.innerHTML=ALL_MONTHS.map((m,i)=>{
+    const cls=(i===lo||i===hi)?'mchip sel':(i>lo&&i<hi)?'mchip mid':'mchip';
+    return `<button class="${cls}" onclick="pickM('${m}')">${M_LABELS[m]}</button>`;
+  }).join('');
+  pill.textContent=rangeLabel();
+  const isRange=ms.length>1;
+  clr.style.display=isRange?'':'none';
+  hint.textContent=isRange?`Showing ${ms.length} months aggregated`:'Click a second month to select a range';
 }
 
 // ─── SUMMARY ──────────────────────────────────────────────
@@ -867,7 +942,13 @@ function renderAnalytics(){
 }
 
 // ─── EVENTS ───────────────────────────────────────────────
-function setM(m){ curM=m; srch=''; renderAll(); }
+function pickM(m){
+  if(!rangePicking){ rangeStart=m; rangeEnd=null; rangePicking=true; }
+  else{ rangeEnd=(m===rangeStart)?null:m; rangePicking=false; }
+  srch=''; renderAll();
+}
+function clearRange(){ rangeStart='Jan26'; rangeEnd=null; rangePicking=false; srch=''; renderAll(); }
+function setM(m){ rangeStart=m; rangeEnd=null; rangePicking=false; srch=''; renderAll(); }
 function setT(t){ curT=t; srch=''; renderLB(); }
 function doSrch(s){ srch=s.toLowerCase(); renderTbl(); }
 function renderAll(){ renderMbar(); renderSummary(); renderLB(); renderAnalytics(); }
