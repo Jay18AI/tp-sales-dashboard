@@ -452,12 +452,11 @@ async function init(){
     const liveData = await fetchAllSheets();
     const fetchedCount = Object.keys(liveData).length;
     if(fetchedCount > 0){
-      // Preserve products from FALLBACK for months where live data has none
+      // Use live products if script returned them, else fall back to embedded data
       Object.keys(liveData).forEach(function(mk){
-        if(!liveData[mk].products || !liveData[mk].products.length){
-          if(FALLBACK[mk] && FALLBACK[mk].products && FALLBACK[mk].products.length){
-            liveData[mk].products = FALLBACK[mk].products;
-          }
+        if((!liveData[mk].products || !liveData[mk].products.length) &&
+           FALLBACK[mk] && FALLBACK[mk].products && FALLBACK[mk].products.length){
+          liveData[mk].products = FALLBACK[mk].products;
         }
       });
       DATA = liveData;
@@ -611,22 +610,7 @@ function renderSummary(){
       ${k.bar?`<div class="kpi-bar" style="width:${Math.min(100,k.bar.p*100).toFixed(1)}%;background:${k.bar.c}"></div>`:''}
     </div>`).join('');
 
-  // Products — only show those with revenue
-  const prods=(d.products||[]).filter(p=>p.revenue>0).sort((a,b)=>b.revenue-a.revenue);
-  const maxPR=prods.length?prods[0].revenue:1;
-  const PROD_COLORS={'Software':'#00d4ff','SmartSync':'#8b5cf6','CGM':'#f5c842','Billing':'#00c896','Dx':'#f97316','Renewal of Software':'#64b5f6','Pillup':'#f472b6','IPD':'#a78bfa','Care Plan':'#22d3ee','SMS':'#4ade80','VoiceRx':'#fb923c'};
-  const pHTML=prods.slice(0,12).map(p=>{
-    const c=PROD_COLORS[p.product]||'#6b85a0';
-    return `<div class="pr">
-      <div class="pn">${p.product}</div>
-      <div class="pr-right">
-        <div class="pbar"><div class="pbar-f" style="width:${Math.min(100,p.revenue/maxPR*100).toFixed(1)}%;background:${c}"></div></div>
-        <span class="pv">${fmt(p.revenue)}</span>
-        <span class="pp">${pct(p.revenue/Math.max(1,tRev))}</span>
-        <span class="pu2">${p.units}u</span>
-      </div>
-    </div>`;
-  }).join('');
+
 
   document.getElementById('sec-summary').innerHTML=`
   <div class="card">
@@ -646,7 +630,6 @@ function renderSummary(){
         <span><span class="ld" style="background:#f97316"></span>Other Revenue</span>
       </div>
     </div>
-    ${prods.length?`<div class="pg2"><div class="pcard"><div class="pcard-h">📦 Product-wise Breakdown · Revenue | Contribution | Units</div>${pHTML}</div></div>`:''}
   </div>`;
 }
 
